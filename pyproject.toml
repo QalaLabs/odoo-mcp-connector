@@ -1,0 +1,81 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "odoo-mcp-connector"
+version = "0.1.0"
+description = "MCP server for Odoo ERP - Claude AI integration"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Developer", email = "dev@example.com" }
+]
+keywords = ["mcp", "odoo", "erp", "model-context-protocol", "claude", "ai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Office/Business",
+]
+
+dependencies = [
+    "mcp>=1.26.0,<2",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "requests>=2.32.3",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.5",
+    "pytest-asyncio>=1.0.0",
+    "pytest-cov>=6.1.1",
+    "ruff>=0.15.2",
+    "mypy>=1.14.0",
+    "types-requests>=2.32.0",
+]
+
+[project.scripts]
+odoo-mcp-connector = "mcp_server_odoo.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mcp_server_odoo"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "asyncio: marks tests as async",
+    "yolo: needs running Odoo instance",
+    "mcp: needs Odoo MCP module",
+]
+
+[tool.coverage.run]
+source = ["mcp_server_odoo"]
+omit = ["tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "B", "Q"]
+ignore = ["E501"]

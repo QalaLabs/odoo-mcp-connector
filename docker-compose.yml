@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  odoo-mcp:
+    build: .
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
