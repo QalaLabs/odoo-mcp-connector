@@ -6,14 +6,23 @@
 odoo-mcp-connector/
 ├── mcp_server_odoo/       # Main package
 │   ├── __init__.py        # Exports
+│   ├── __main__.py        # CLI entry point
 │   ├── server.py          # MCP server class
 │   ├── tools.py           # All MCP tools
 │   ├── odoo_connection.py # Odoo API client
 │   ├── config.py          # Settings
-│   └── ...
+│   ├── formatters.py      # LLM output formatting
+│   ├── error_handling.py  # Custom exceptions
+│   ├── error_sanitizer.py # Safe error messages
+│   ├── performance.py     # Connection pool, rate limiter
+│   ├── schemas.py         # Pydantic schemas
+│   ├── resources.py       # MCP resources
+│   ├── webhooks.py        # REST webhook endpoint
+│   ├── channels.py        # WhatsApp/Email adapters
+│   └── logging_config.py  # Structured logging
 ├── tests/                 # Unit tests
 ├── docs/                  # Documentation
-└── tentacles/             # Octogent context (optional)
+└── skills/                # Octogent context (optional)
 ```
 
 ## Development
@@ -84,11 +93,19 @@ pytest tests/ --cov=mcp_server_odoo
 
 ## Architecture
 
-- `server.py` - MCP protocol handler
-- `tools.py` - Tool registry and execution
-- `odoo_connection.py` - Odoo API abstraction
+- `server.py` - MCP protocol handler (imports Tool, Resource, ResourceTemplate, TextContent, CallToolResult from mcp.types)
+- `tools.py` - Tool registry and execution (27 tools)
+- `odoo_connection.py` - Odoo API abstraction (XML-RPC + JSON/2 auto-detect)
 - `formatters.py` - LLM output formatting
-- `error_sanitizer.py` - Safe error messages
+- `error_sanitizer.py` - Safe error messages (redacts API keys/passwords)
+- `config.py` - Pydantic settings (loads from .env or env vars: ODOO_URL, ODOO_API_KEY, ODOO_DB, etc.)
+- `performance.py` - Connection pool, smart field selector, rate limiter
+- `webhooks.py` - REST webhook endpoint for website contact forms (port 8080)
+- `channels.py` - WhatsApp (Convertway) and Email (Gmail) adapters
+- `schemas.py` - Pydantic input/output schemas
+- `resources.py` - MCP resource definitions
+- `logging_config.py` - Structured logging (JSON or text)
+- `error_handling.py` - Custom exceptions
 
 ## Odoo API Notes
 
@@ -96,6 +113,12 @@ pytest tests/ --cov=mcp_server_odoo
 - Odoo 14-18 uses XML-RPC
 - Connection auto-detects version
 - API keys require Odoo MCP module (or YOLO mode)
+
+## Known Issues
+
+- `TextResource` removed from mcp.types in mcp SDK 1.27.0 — use Resource instead
+- `streamable-http` transport not fully implemented; falls back to stdio
+- Config reads env vars directly in `__init__` (pydantic-settings case sensitivity workaround)
 
 ## License
 
