@@ -8,7 +8,7 @@ odoo-mcp-connector/
 │   ├── __init__.py        # Exports
 │   ├── __main__.py        # CLI entry point
 │   ├── server.py          # MCP server class
-│   ├── tools.py           # All MCP tools
+│   ├── tools.py           # All MCP tools (32 tools)
 │   ├── odoo_connection.py # Odoo API client
 │   ├── config.py          # Settings
 │   ├── formatters.py      # LLM output formatting
@@ -17,8 +17,9 @@ odoo-mcp-connector/
 │   ├── performance.py     # Connection pool, rate limiter
 │   ├── schemas.py         # Pydantic schemas
 │   ├── resources.py       # MCP resources
-│   ├── webhooks.py        # REST webhook endpoint
+│   ├── webhooks.py        # REST webhook endpoint (port 8080)
 │   ├── channels.py        # WhatsApp/Email adapters
+│   ├── lead_classifier.py # Lead type classification (B2C, B2B, support, dealer)
 │   └── logging_config.py  # Structured logging
 ├── tests/                 # Unit tests
 ├── docs/                  # Documentation
@@ -94,7 +95,7 @@ pytest tests/ --cov=mcp_server_odoo
 ## Architecture
 
 - `server.py` - MCP protocol handler (imports Tool, Resource, ResourceTemplate, TextContent, CallToolResult from mcp.types)
-- `tools.py` - Tool registry and execution (27 tools)
+- `tools.py` - Tool registry and execution (27 tools listed but 32 registered including create_draft_bill, post_after_approval, query_partners, get_invoices, update_crm_lead)
 - `odoo_connection.py` - Odoo API abstraction (XML-RPC + JSON/2 auto-detect)
 - `formatters.py` - LLM output formatting
 - `error_sanitizer.py` - Safe error messages (redacts API keys/passwords)

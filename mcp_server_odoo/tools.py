@@ -284,6 +284,71 @@ def register_all_tools(connection: OdooConnection) -> list[Tool]:
             description="Get server version and connection info",
             inputSchema={"type": "object", "properties": {}},
         ),
+        Tool(
+            name="create_draft_bill",
+            description="Create a draft vendor/customer bill (account.move)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "partner_id": {"type": "integer", "description": "Vendor/customer ID"},
+                    "move_type": {"type": "string", "description": "in_invoice (vendor), out_invoice (customer)", "default": "in_invoice"},
+                    "date": {"type": "string", "description": "Bill date (YYYY-MM-DD)"},
+                    "invoice_line_ids": {"type": "array", "description": "Invoice line items"},
+                    "ref": {"type": "string", "description": "Vendor reference"},
+                },
+                "required": ["partner_id"],
+            },
+        ),
+        Tool(
+            name="post_after_approval",
+            description="Post/validate a draft invoice (change state to posted)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "description": "Invoice ID to post"},
+                },
+                "required": ["invoice_id"],
+            },
+        ),
+        Tool(
+            name="query_partners",
+            description="Search customers/vendors/partners",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "domain": {"type": "array", "description": "Search domain filters"},
+                    "limit": {"type": "integer", "default": 10},
+                    "name": {"type": "string", "description": "Quick search by name"},
+                    "email": {"type": "string", "description": "Search by email"},
+                },
+            },
+        ),
+        Tool(
+            name="get_invoices",
+            description="Get invoice by ID with full details",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "invoice_id": {"type": "integer", "description": "Invoice ID"},
+                },
+                "required": ["invoice_id"],
+            },
+        ),
+        Tool(
+            name="update_crm_lead",
+            description="Update CRM lead stage, team, or assignee",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "lead_id": {"type": "integer", "description": "Lead ID to update"},
+                    "stage_id": {"type": "integer", "description": "New stage ID"},
+                    "team_id": {"type": "integer", "description": "Sales team ID"},
+                    "user_id": {"type": "integer", "description": "Assign to user ID"},
+                    "priority": {"type": "string", "description": "1 (low), 2 (medium), 3 (high)"},
+                },
+                "required": ["lead_id"],
+            },
+        ),
     ]
     return tools
 
@@ -339,6 +404,16 @@ async def execute_tool(
             return await _create_expense(connection, arguments)
         elif name == "server_info":
             return await _server_info(connection, arguments)
+        elif name == "create_draft_bill":
+            return await _create_draft_bill(connection, arguments)
+        elif name == "post_after_approval":
+            return await _post_after_approval(connection, arguments)
+        elif name == "query_partners":
+            return await _query_partners(connection, arguments)
+        elif name == "get_invoices":
+            return await _get_invoices(connection, arguments)
+        elif name == "update_crm_lead":
+            return await _update_crm_lead(connection, arguments)
         else:
             return CallToolResult(
                 content=[TextContent(type="text", text=f"Unknown tool: {name}")],
@@ -631,3 +706,109 @@ async def _server_info(conn: OdooConnection, args: dict) -> CallToolResult:
 **Version:** {version.major}.{version.minor}
 **User ID:** {conn.uid}"""
     return CallToolResult(content=[TextContent(type="text", text=text)])
+
+
+async def _create_draft_bill(conn: OdooConnection, args: dict) -> CallToolResult:
+    """Create a draft bill."""
+    values = {
+        "partner_id": args["partner_id"],
+        "move_type": args.get("move_type", "in_invoice"),
+    }
+    if args.get("date"):
+        values["date"] = args["date"]
+    if args.get("invoice_line_ids"):
+        values["invoice_line_ids"] = args["invoice_line_ids"]
+    if args.get("ref"):
+        values["ref"] = args["ref"]
+    bill_id = conn.create("account.move", values)
+    return CallToolResult(content=[TextContent(
+        type="text", text=f"Created draft bill ID: {bill_id} ({args.get('move_type', 'in_invoice')})"
+    )])
+
+
+async def _post_after_approval(conn: OdooConnection, args: dict) -> CallToolResult:
+    """Post a draft invoice."""
+    invoice_id = args["invoice_id"]
+    bill = conn.read("account.move", [invoice_id], ["state", "name"])
+    if not bill:
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Invoice {invoice_id} not found")],
+            isError=True,
+        )
+    state = bill[0].get("state")
+    if state != "draft":
+        return CallToolResult(content=[TextContent(
+            type="text", text=f"Invoice {invoice_id} is already in state '{state}'. Cannot post."
+        )])
+    conn.call_method("account.move", "action_post", args=[[invoice_id]])
+    name = bill[0].get("name", invoice_id)
+    return CallToolResult(content=[TextContent(
+        type="text", text=f"Posted invoice {name} (ID: {invoice_id})"
+    )])
+
+
+async def _query_partners(conn: OdooConnection, args: dict) -> CallToolResult:
+    """Search partners."""
+    domain = args.get("domain", [])
+    if args.get("name"):
+        domain.append(["name", "ilike", args["name"]])
+    if args.get("email"):
+        domain.append(["email", "ilike", args["email"]])
+    if not domain:
+        domain = [["supplier_rank", ">", 0]]
+    records = conn.search_read(
+        "res.partner",
+        domain=domain,
+        fields=["id", "name", "email", "phone", "company_type", "city"],
+        limit=args.get("limit", 10),
+    )
+    count = conn.count("res.partner", domain)
+    text = format_search_result({"records": records, "count": count}, "Partners")
+    return CallToolResult(content=[TextContent(type="text", text=text)])
+
+
+async def _get_invoices(conn: OdooConnection, args: dict) -> CallToolResult:
+    """Get invoice by ID."""
+    records = conn.read(
+        "account.move",
+        [args["invoice_id"]],
+        ["id", "name", "state", "partner_id", "invoice_date", "amount_total",
+         "amount_residual", "payment_state", "invoice_line_ids", "move_type", "ref"],
+    )
+    if not records:
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Invoice {args['invoice_id']} not found")],
+            isError=True,
+        )
+    rec = records[0]
+    lines = [f"## Invoice: {rec.get('name', rec.get('id'))}"]
+    lines.append(f"**State:** {rec.get('state', 'N/A')}")
+    lines.append(f"**Type:** {rec.get('move_type', 'N/A')}")
+    lines.append(f"**Partner ID:** {rec.get('partner_id', 'N/A')}")
+    lines.append(f"**Date:** {rec.get('invoice_date', 'N/A')}")
+    lines.append(f"**Total:** {rec.get('amount_total', 0)}")
+    lines.append(f"**Residual:** {rec.get('amount_residual', 0)}")
+    lines.append(f"**Payment State:** {rec.get('payment_state', 'N/A')}")
+    if rec.get("ref"):
+        lines.append(f"**Ref:** {rec['ref']}")
+    text = "\n".join(lines)
+    return CallToolResult(content=[TextContent(type="text", text=text)])
+
+
+async def _update_crm_lead(conn: OdooConnection, args: dict) -> CallToolResult:
+    """Update CRM lead."""
+    lead_id = args["lead_id"]
+    values = {}
+    for field in ("stage_id", "team_id", "user_id", "priority"):
+        if args.get(field):
+            values[field] = args[field]
+    if not values:
+        return CallToolResult(
+            content=[TextContent(type="text", text="No fields to update")],
+            isError=True,
+        )
+    conn.write("crm.lead", [lead_id], values)
+    updated = ", ".join(f"{k}={v}" for k, v in values.items())
+    return CallToolResult(content=[TextContent(
+        type="text", text=f"Updated lead ID {lead_id}: {updated}"
+    )])
