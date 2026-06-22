@@ -30,6 +30,7 @@ from .schemas import (
     ModelInfo,
     FieldInfo,
 )
+from .lead_classifier import classify_lead
 
 __all__ = [
     "__version__",
@@ -48,4 +49,5 @@ __all__ = [
     "RecordData",
     "ModelInfo",
     "FieldInfo",
+    "classify_lead",
 ]

@@ -95,10 +95,14 @@ def get_team_for_type(lead_type: str) -> Optional[int]:
     Override with ODOO_TEAM_B2B, ODOO_TEAM_B2C, ODOO_TEAM_SUPPORT env vars.
     """
     import os
-    var = os.environ.get({
+    env_map = {
         "opportunity": "ODOO_TEAM_B2B",
         "lead": "ODOO_TEAM_B2C",
-    }.get(lead_type, ""))
+    }
+    env_var = env_map.get(lead_type)
+    if not env_var:
+        return None
+    var = os.environ.get(env_var)
     if not var:
         return None
     try:
