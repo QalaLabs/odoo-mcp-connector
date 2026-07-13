@@ -1,7 +1,7 @@
 """Pydantic schemas for MCP tool inputs/outputs."""
 
 from __future__ import annotations
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 from pydantic import BaseModel, Field
 
 
@@ -189,3 +189,81 @@ class ErrorOutput(BaseModel):
     error: str
     code: str
     details: Optional[dict] = None
+
+
+class CountRecordsInput(BaseModel):
+    """Input for count_records tool."""
+    model: str = Field(..., description="Odoo model name")
+    domain: Optional[list[list]] = Field(default=None, description="Search domain filters")
+
+
+class GetModelFieldsInput(BaseModel):
+    """Input for get_model_fields tool."""
+    model: str = Field(..., description="Odoo model name")
+    attributes: Optional[list[str]] = Field(default=None, description="Field attributes to retrieve")
+
+
+class SearchLeadsInput(BaseModel):
+    """Input for search_leads tool."""
+    domain: Optional[list[list]] = Field(default=None, description="Search domain filters")
+    fields: Optional[list[str]] = Field(default=None, description="Fields to return")
+    limit: int = Field(default=10, ge=1, le=100, description="Max records")
+
+
+class SearchInvoicesInput(BaseModel):
+    """Input for search_invoices tool."""
+    domain: Optional[list[list]] = Field(default=None, description="Search domain filters")
+    fields: Optional[list[str]] = Field(default=None, description="Fields to return")
+    limit: int = Field(default=10, ge=1, le=100, description="Max records")
+
+
+class GetStockLevelsInput(BaseModel):
+    """Input for get_stock_levels tool."""
+    product_ids: list[int] = Field(..., description="Product IDs to check stock for")
+    location_id: Optional[int] = Field(default=None, description="Specific inventory location ID")
+
+
+class CreateDraftBillInput(BaseModel):
+    """Input for create_draft_bill tool."""
+    partner_id: int = Field(..., description="Vendor/customer ID")
+    move_type: str = Field(default="in_invoice", description="in_invoice (vendor), out_invoice (customer)")
+    date: Optional[str] = Field(default=None, description="Bill date (YYYY-MM-DD)")
+    invoice_line_ids: Optional[list[dict]] = Field(default=None, description="Invoice line items")
+    ref: Optional[str] = Field(default=None, description="Vendor reference")
+
+
+class PostAfterApprovalInput(BaseModel):
+    """Input for post_after_approval tool."""
+    invoice_id: int = Field(..., description="Invoice ID to post/validate")
+
+
+class QueryPartnersInput(BaseModel):
+    """Input for query_partners tool."""
+    domain: Optional[list[list]] = Field(default=None, description="Search domain filters")
+    limit: int = Field(default=10, ge=1, le=100, description="Max records")
+    name: Optional[str] = Field(default=None, description="Quick search by name")
+    email: Optional[str] = Field(default=None, description="Search by email")
+
+
+class GetInvoicesInput(BaseModel):
+    """Input for get_invoices tool."""
+    invoice_id: int = Field(..., description="Invoice ID")
+
+
+class UpdateCrmLeadInput(BaseModel):
+    """Input for update_crm_lead tool."""
+    lead_id: int = Field(..., description="Lead ID to update")
+    stage_id: Optional[int] = Field(default=None, description="New stage ID")
+    team_id: Optional[int] = Field(default=None, description="Sales team ID")
+    user_id: Optional[int] = Field(default=None, description="Assign to user ID")
+    priority: Optional[str] = Field(default=None, description="1 (low), 2 (medium), 3 (high)")
+
+
+class ConfigureConnectionInput(BaseModel):
+    """Input for configure_connection tool."""
+    url: str = Field(..., description="Odoo instance URL")
+    database: Optional[str] = Field(default=None, description="Database name")
+    api_key: Optional[str] = Field(default=None, description="API key for authentication")
+    user: Optional[str] = Field(default=None, description="Username")
+    password: Optional[str] = Field(default=None, description="Password")
+    yolo_mode: Optional[Literal["off", "read", "true"]] = Field(default=None, description="YOLO mode setting")

@@ -117,9 +117,15 @@ pytest tests/ --cov=mcp_server_odoo
 
 ## Known Issues
 
+- **Stdio Transport Corruption:** `logging_config.py` redirects logs to `sys.stdout` instead of `sys.stderr`, corrupting the stdio JSON-RPC protocol stream.
+- **Blocking Async Handlers:** The async tool handlers make blocking synchronous Odoo XML-RPC and HTTP network calls, causing event loop starvation under load.
+- **Unimplemented Security Modes:** Documented `yolo_mode` settings are ignored in the execution path, allowing write operations when YOLO is set to "off" or "read".
+- **Orphaned Webhooks/Channels:** Webhook server (`webhooks.py`) and WhatsApp/Email channel adapters (`channels.py`) are fully implemented but never started or called by the entrypoint.
+- **Schema Duplication:** Input schemas are defined as Pydantic models in `schemas.py` but duplicated as raw JSON dicts in `tools.py` and are not validated in handlers.
 - `TextResource` removed from mcp.types in mcp SDK 1.27.0 — use Resource instead
 - `streamable-http` transport not fully implemented; falls back to stdio
 - Config reads env vars directly in `__init__` (pydantic-settings case sensitivity workaround)
+
 
 ## License
 

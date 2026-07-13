@@ -35,9 +35,9 @@ def format_records(records: list[dict], model: str = None) -> str:
     
     lines = [f"## {model or 'Records'} ({len(records)} found)"]
     lines.append("")
-    
     for i, record in enumerate(records, 1):
-        lines.append(f"### {i}. {record.get('display_name', record.get('name', f'ID: {record.get("id")}'))}")
+        display_name = record.get("display_name") or record.get("name") or f"ID: {record.get('id')}"
+        lines.append(f"### {i}. {display_name}")
         for key, value in record.items():
             if key in ("id", "display_name") or value is None:
                 continue

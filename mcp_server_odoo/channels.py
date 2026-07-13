@@ -6,6 +6,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 
 from .lead_classifier import classify_lead, get_tags_for_type, get_team_for_type
+from .odoo_connection import run_sync
 
 logger = logging.getLogger(__name__)
 
@@ -18,10 +19,10 @@ class ChannelAdapter:
 
     def _ensure_tag(self, tag_name: str) -> Optional[int]:
         """Look up or create a crm.tag by name."""
-        existing = self.conn.search("crm.tag", [["name", "=", tag_name]], limit=1)
+        existing = run_sync(self.conn.search("crm.tag", [["name", "=", tag_name]], limit=1))
         if existing:
             return existing[0]
-        return self.conn.create("crm.tag", {"name": tag_name})
+        return run_sync(self.conn.create("crm.tag", {"name": tag_name}))
 
     def _resolve_tags(self, tag_names: list[str]) -> list[int]:
         return [self._ensure_tag(t) for t in tag_names if t]
@@ -29,28 +30,28 @@ class ChannelAdapter:
     def _schedule_follow_up(self, lead_id: int, name: str, hours: int = 24):
         """Create a mail.activity for follow-up."""
         try:
-            model_ids = self.conn.search("ir.model", [["model", "=", "crm.lead"]], limit=1)
+            model_ids = run_sync(self.conn.search("ir.model", [["model", "=", "crm.lead"]], limit=1))
             res_model_id = model_ids[0] if model_ids else False
             deadline = datetime.now() + timedelta(hours=hours)
-            self.conn.create("mail.activity", {
+            run_sync(self.conn.create("mail.activity", {
                 "res_id": lead_id,
                 "res_model_id": res_model_id,
                 "activity_type_id": 1,
                 "date_deadline": deadline.date().isoformat(),
                 "summary": f"Follow-up: {name}",
                 "note": f"First follow-up for new lead from channel",
-            })
+            }))
         except Exception as e:
             logger.warning(f"Could not schedule follow-up: {e}")
 
     def _post_message(self, lead_id: int, body: str):
         """Post a message to lead chatter."""
         try:
-            self.conn.call_method(
+            run_sync(self.conn.call_method(
                 "crm.lead", "message_post",
                 args=[[lead_id]],
                 kwargs={"body": body, "subtype": "comment"},
-            )
+            ))
         except Exception as e:
             logger.warning(f"Could not post message to lead {lead_id}: {e}")
 
@@ -88,7 +89,7 @@ class WhatsAppAdapter(ChannelAdapter):
                 values["team_id"] = team_id
             if partner_id:
                 values["partner_id"] = partner_id
-            lead_id = self.conn.create("crm.lead", values)
+            lead_id = run_sync(self.conn.create("crm.lead", values))
             self._schedule_follow_up(lead_id, name)
 
         body = f"""[WhatsApp - INBOUND]
@@ -102,18 +103,18 @@ Time: {timestamp}
     def _find_by_phone(self, phone: str) -> Optional[int]:
         if not phone:
             return None
-        leads = self.conn.search("crm.lead", [["phone", "=", phone]], limit=1)
+        leads = run_sync(self.conn.search("crm.lead", [["phone", "=", phone]], limit=1))
         return leads[0] if leads else None
 
     def _find_or_create_partner(self, name: str, phone: str) -> Optional[int]:
         if not phone:
             return None
-        partners = self.conn.search("res.partner", [["phone", "=", phone]], limit=1)
+        partners = run_sync(self.conn.search("res.partner", [["phone", "=", phone]], limit=1))
         if partners:
             return partners[0]
-        return self.conn.create("res.partner", {
+        return run_sync(self.conn.create("res.partner", {
             "name": name, "phone": phone, "company_type": "person",
-        })
+        }))
 
 
 class EmailAdapter(ChannelAdapter):
@@ -153,7 +154,7 @@ class EmailAdapter(ChannelAdapter):
                 values["team_id"] = team_id
             if partner_id:
                 values["partner_id"] = partner_id
-            lead_id = self.conn.create("crm.lead", values)
+            lead_id = run_sync(self.conn.create("crm.lead", values))
             self._schedule_follow_up(lead_id, name)
 
         formatted_body = f"""[Email - INBOUND]
@@ -184,18 +185,18 @@ Thread: {thread_id}
     def _find_by_email(self, email: str) -> Optional[int]:
         if not email:
             return None
-        leads = self.conn.search("crm.lead", [["email_from", "=", email]], limit=1)
+        leads = run_sync(self.conn.search("crm.lead", [["email_from", "=", email]], limit=1))
         return leads[0] if leads else None
 
     def _find_or_create_partner(self, name: str, email: str) -> Optional[int]:
         if not email:
             return None
-        partners = self.conn.search("res.partner", [["email", "=", email]], limit=1)
+        partners = run_sync(self.conn.search("res.partner", [["email", "=", email]], limit=1))
         if partners:
             return partners[0]
-        return self.conn.create("res.partner", {
+        return run_sync(self.conn.create("res.partner", {
             "name": name, "email": email, "company_type": "person",
-        })
+        }))
 
 
 def get_channel_adapter(channel: str, odoo_connection) -> Optional[ChannelAdapter]:
@@ -205,3 +206,4 @@ def get_channel_adapter(channel: str, odoo_connection) -> Optional[ChannelAdapte
     elif channel.lower() in ("email", "gmail"):
         return EmailAdapter(odoo_connection)
     return None
+

@@ -44,7 +44,15 @@ class OdooMCPServer:
             """Handle tool calls."""
             from .tools import execute_tool
             try:
-                result = await execute_tool(self._connection, name, arguments)
+                # Ensure connection is established
+                if self._connection is None:
+                    try:
+                        await self.connect()
+                    except Exception:
+                        pass
+                
+                # Execute tool using the server instance to resolve connection state dynamically
+                result = await execute_tool(self, name, arguments)
                 return result
             except Exception as e:
                 self.logger.error(f"Tool error: {name}", exc_info=True)
@@ -93,30 +101,86 @@ class OdooMCPServer:
         async def read_resource(uri: Any) -> str:
             """Read a resource."""
             from .resources import read_resource_uri
+            if self._connection is None:
+                try:
+                    await self.connect()
+                except Exception:
+                    pass
             return await read_resource_uri(self._connection, str(uri))
 
-    def connect(self) -> None:
+    async def connect(self) -> None:
         """Connect to Odoo."""
         try:
-            self._connection = create_connection(self.config)
+            self._connection = await create_connection(self.config)
             self.logger.info(f"Connected to Odoo {self._connection.url}")
             self.logger.info(f"Using API: {self._connection.api_type}")
+            # Update webhook connection if running
+            if hasattr(self, "_webhook_server") and self._webhook_server:
+                self._webhook_server.odoo_connection = self._connection
         except Exception as e:
             self.logger.error(f"Connection failed: {e}")
-            raise
+            self._connection = None
+
+    def _start_webhook_listener(self) -> None:
+        """Start webhook HTTP server on a background thread."""
+        import threading
+        from .webhooks import WebhookServer, WebhookConfig
+
+        # Don't start twice
+        if hasattr(self, "_webhook_thread") and self._webhook_thread is not None:
+            return
+
+        try:
+            webhook_config = WebhookConfig(
+                host=self.config.mcp_host,
+                port=8080,  # default webhook port
+                odoo_config={
+                    "url": self.config.url,
+                    "database": self.config.database,
+                    "api_key": self.config.api_key,
+                    "user": self.config.user,
+                    "password": self.config.password,
+                }
+            )
+            self._webhook_server = WebhookServer(webhook_config)
+            self._webhook_server.odoo_connection = self._connection
+
+            def serve():
+                self.logger.info(f"Starting webhook server on {webhook_config.host}:{webhook_config.port}")
+                try:
+                    self._webhook_server.serve_forever()
+                except Exception as e:
+                    self.logger.error(f"Webhook server error: {e}")
+
+            self._webhook_thread = threading.Thread(target=serve, daemon=True)
+            self._webhook_thread.start()
+        except Exception as e:
+            self.logger.error(f"Failed to initialize webhook server: {e}")
 
     async def run(self) -> None:
         """Run the MCP server."""
-        self.connect()
+        try:
+            await self.connect()
+        except Exception as e:
+            self.logger.error(f"Initial connection attempt failed: {e}")
+        
+        # Start webhook server on background thread
+        self._start_webhook_listener()
+        
         self.logger.info("Starting Odoo MCP Server...")
         
-        options = self.config.model_dump()
-        async with stdio_server() as (read_stream, write_stream):
-            await self._server.run(
-                read_stream,
-                write_stream,
-                options,
-            )
+        try:
+            options = self.config.model_dump()
+            async with stdio_server() as (read_stream, write_stream):
+                await self._server.run(
+                    read_stream,
+                    write_stream,
+                    options,
+                )
+        finally:
+            if hasattr(self, "_webhook_server") and self._webhook_server:
+                self.logger.info("Stopping webhook server...")
+                self._webhook_server.shutdown()
 
 
 def create_server(config: OdooConfig = None) -> OdooMCPServer:

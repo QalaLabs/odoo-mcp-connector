@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from .lead_classifier import classify_lead, get_tags_for_type, get_team_for_type
+from .odoo_connection import run_sync
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,13 @@ class ContactData:
     company: Optional[str]
     message: str
     metadata: dict
+
+
+@dataclass
+class ClassificationData:
+    """Classification details."""
+    lead_type: str
+    priority: str
 
 
 class WebhookHandler(BaseHTTPRequestHandler):
@@ -127,22 +135,22 @@ class WebhookHandler(BaseHTTPRequestHandler):
         tag_names = get_tags_for_type(classification["lead_type"])
         tag_ids = []
         for t in tag_names:
-            existing = conn.search("crm.tag", [["name", "=", t]], limit=1)
+            existing = run_sync(conn.search("crm.tag", [["name", "=", t]], limit=1))
             if existing:
                 tag_ids.append(existing[0])
             else:
-                tag_ids.append(conn.create("crm.tag", {"name": t}))
+                tag_ids.append(run_sync(conn.create("crm.tag", {"name": t})))
 
         partner_id = None
         if contact.email:
-            partners = conn.search("res.partner", [["email", "=", contact.email]], limit=1)
+            partners = run_sync(conn.search("res.partner", [["email", "=", contact.email]], limit=1))
             if not partners:
-                partner_id = conn.create("res.partner", {
+                partner_id = run_sync(conn.create("res.partner", {
                     "name": contact.name,
                     "email": contact.email,
                     "phone": contact.phone,
                     "company_type": "company" if contact.company else "person",
-                })
+                }))
             else:
                 partner_id = partners[0]
 
@@ -163,24 +171,24 @@ class WebhookHandler(BaseHTTPRequestHandler):
         if partner_id:
             values["partner_id"] = partner_id
 
-        lead_id = conn.create("crm.lead", values)
+        lead_id = run_sync(conn.create("crm.lead", values))
 
         if contact.message:
-            conn.call_method("crm.lead", "message_post", args=[[lead_id]], kwargs={
+            run_sync(conn.call_method("crm.lead", "message_post", args=[[lead_id]], kwargs={
                 "body": f"[Website Contact Form]\n\n{contact.message}",
                 "subtype": "comment",
-            })
+            }))
 
         deadline = datetime.now() + timedelta(hours=24)
         try:
-            model_ids = conn.search("ir.model", [["model", "=", "crm.lead"]], limit=1)
-            conn.create("mail.activity", {
+            model_ids = run_sync(conn.search("ir.model", [["model", "=", "crm.lead"]], limit=1))
+            run_sync(conn.create("mail.activity", {
                 "res_id": lead_id,
                 "res_model_id": model_ids[0] if model_ids else False,
                 "activity_type_id": 1,
                 "date_deadline": deadline.date().isoformat(),
                 "summary": f"Follow-up: {contact.name}",
-            })
+            }))
         except Exception:
             pass
 
@@ -211,3 +219,4 @@ def start_webhook_server(config: WebhookConfig, odoo_conn=None):
     except KeyboardInterrupt:
         logger.info("Shutting down webhook server")
         server.shutdown()
+

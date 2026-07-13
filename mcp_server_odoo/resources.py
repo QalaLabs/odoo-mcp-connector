@@ -20,7 +20,7 @@ def register_all_resources(connection: OdooConnection) -> list[Resource]:
     ]
 
 
-def read_resource_uri(connection: OdooConnection, uri: str) -> str:
+async def read_resource_uri(connection: OdooConnection, uri: str) -> str:
     """Read a resource by URI."""
     if not connection:
         return "Not connected to Odoo"
@@ -44,18 +44,19 @@ def read_resource_uri(connection: OdooConnection, uri: str) -> str:
     
     try:
         if action == "record" and record_id:
-            records = connection.read(model, [record_id])
+            records = await connection.read(model, [record_id])
             return format_records(records, model)
         elif action == "search":
-            records = connection.search_read(model, limit=10)
+            records = await connection.search_read(model, limit=10)
             return format_records(records, model)
         elif action == "count":
-            count = connection.count(model)
+            count = await connection.count(model)
             return format_count(count, model)
         elif action == "fields":
-            fields = connection.fields_get(model)
+            fields = await connection.fields_get(model)
             return format_field_info(fields)
         else:
             return f"Unknown action: {action}"
     except Exception as e:
         return f"Error: {str(e)}"
+

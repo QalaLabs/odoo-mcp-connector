@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 from dataclasses import dataclass
 import xmlrpc.client
 
@@ -43,14 +44,16 @@ class OdooConnection:
         if config.api_key:
             self._session.headers["Authorization"] = f"Bearer {config.api_key}"
 
-    def connect(self) -> None:
+    async def connect(self) -> None:
         """Establish connection to Odoo and detect version."""
-        try:
+        def _sync_connect():
             if self.config.api_key:
                 self._connect_with_api_key()
             else:
                 self._connect_with_password()
             self._detect_version()
+        try:
+            await asyncio.to_thread(_sync_connect)
         except Exception as e:
             raise OdooConnectionError(f"Failed to connect to Odoo: {e}") from e
 
@@ -140,11 +143,11 @@ class OdooConnection:
             self.api_type = "xmlrpc"
             self._version = OdooVersion(major=0, minor=0, api_type="xmlrpc")
 
-    def execute(self, model: str, method: str, *args, **kwargs) -> Any:
+    async def execute(self, model: str, method: str, *args, **kwargs) -> Any:
         """Execute Odoo model method."""
         if self.api_type == "json2":
-            return self._execute_json2(model, method, *args, **kwargs)
-        return self._execute_xmlrpc(model, method, *args, **kwargs)
+            return await asyncio.to_thread(self._execute_json2, model, method, *args, **kwargs)
+        return await asyncio.to_thread(self._execute_xmlrpc, model, method, *args, **kwargs)
 
     def _execute_json2(self, model: str, method: str, *args, **kwargs) -> Any:
         """Execute via JSON/2 API (Odoo 19+)."""
@@ -190,7 +193,7 @@ class OdooConnection:
             kwargs,
         )
 
-    def search_read(
+    async def search_read(
         self,
         model: str,
         domain: list = None,
@@ -216,66 +219,75 @@ class OdooConnection:
         if order:
             kwargs["order"] = order
         
-        return self.execute(model, "search_read", [], kwargs)
+        return await self.execute(model, "search_read", [], kwargs)
 
-    def search(self, model: str, domain: list = None, limit: int = None) -> list[int]:
+    async def search(self, model: str, domain: list = None, limit: int = None) -> list[int]:
         """Search for record IDs."""
         domain = domain or []
         kwargs: dict = {}
         if limit:
             kwargs["limit"] = limit
-        return self.execute(model, "search", [domain], kwargs)
+        return await self.execute(model, "search", [domain], kwargs)
 
-    def count(self, model: str, domain: list = None) -> int:
+    async def count(self, model: str, domain: list = None) -> int:
         """Count records matching domain."""
         domain = domain or []
-        return self.execute(model, "search_count", [domain], {})
+        return await self.execute(model, "search_count", [domain], {})
 
-    def read(self, model: str, ids: list[int], fields: list = None) -> list[dict]:
+    async def read(self, model: str, ids: list[int], fields: list = None) -> list[dict]:
         """Read specific records by IDs."""
         if fields is None:
             fields = ["id", "display_name"]
         elif fields == "__all__":
             fields = []
-        return self.execute(model, "read", [ids], {"fields": fields})
+        return await self.execute(model, "read", [ids], {"fields": fields})
 
-    def create(self, model: str, values: dict) -> int:
+    async def create(self, model: str, values: dict) -> int:
         """Create a new record."""
-        return self.execute(model, "create", [values], {})
+        return await self.execute(model, "create", [values], {})
 
-    def write(self, model: str, ids: list[int], values: dict) -> bool:
+    async def write(self, model: str, ids: list[int], values: dict) -> bool:
         """Update existing records."""
-        return self.execute(model, "write", [ids, values], {})
+        return await self.execute(model, "write", [ids, values], {})
 
-    def unlink(self, model: str, ids: list[int]) -> bool:
+    async def unlink(self, model: str, ids: list[int]) -> bool:
         """Delete records."""
-        return self.execute(model, "unlink", [ids], {})
+        return await self.execute(model, "unlink", [ids], {})
 
-    def fields_get(self, model: str, attributes: list = None) -> dict:
+    async def fields_get(self, model: str, attributes: list = None) -> dict:
         """Get field definitions for a model."""
         attrs = attributes or ["name", "type", "string", "help", "required", "readonly"]
-        return self.execute(model, "fields_get", [], {"attributes": attrs})
+        return await self.execute(model, "fields_get", [], {"attributes": attrs})
 
-    def call_method(self, model: str, method: str, args: list = None, kwargs: dict = None) -> Any:
+    async def call_method(self, model: str, method: str, args: list = None, kwargs: dict = None) -> Any:
         """Call arbitrary model method."""
         args = args or []
         kwargs = kwargs or {}
-        return self.execute(model, method, args, kwargs)
+        return await self.execute(model, method, args, kwargs)
 
     @property
     def version(self) -> OdooVersion:
         """Get Odoo version info."""
         if self._version is None:
-            self._detect_version()
+            # Note: properties in Python cannot be async, but this is accessed inside async tool handlers or is initialized on connect.
+            # We will run version detection in a background task or just run it synchronously if needed, but it should be set on connect.
+            try:
+                # Run sync in thread if needed
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # We can't await inside a property, so return major=0, minor=0 if not loaded, or let connect() set it.
+                    pass
+            except Exception:
+                pass
         return self._version or OdooVersion(major=0, minor=0, api_type="xmlrpc")
 
 
-def create_connection(config: OdooConfig = None) -> OdooConnection:
+async def create_connection(config: OdooConfig = None) -> OdooConnection:
     """Create and connect to Odoo instance."""
     if config is None:
         config = load_config()
     conn = OdooConnection(config)
-    conn.connect()
+    await conn.connect()
     return conn
 
 
@@ -283,3 +295,17 @@ def load_config() -> OdooConfig:
     """Load config - import here to avoid circular import."""
     from .config import load_config as _load_config
     return _load_config()
+
+
+def run_sync(coro: Any) -> Any:
+    """Run an async coroutine synchronously."""
+    try:
+        return asyncio.run(coro)
+    except RuntimeError:
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        return loop.run_until_complete(coro)
+

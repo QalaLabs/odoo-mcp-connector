@@ -1,0 +1,182 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/mcpb/main/schemas/mcpb-manifest-v0.4.schema.json",
+  "manifest_version": "0.4",
+  "name": "odoo-mcp-connector",
+  "display_name": "Odoo MCP Connector",
+  "version": "0.1.0",
+  "description": "MCP server for Odoo ERP - Claude AI integration",
+  "author": {
+    "name": "Qala Labs",
+    "email": "hello@qalalabs.com",
+    "url": "https://github.com/QalaLabs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/QalaLabs/odoo-mcp-connector.git"
+  },
+  "homepage": "https://github.com/QalaLabs/odoo-mcp-connector#readme",
+  "support": "https://github.com/QalaLabs/odoo-mcp-connector/issues",
+  "license": "MIT",
+  "server": {
+    "type": "python",
+    "entry_point": "mcp_server_odoo/__main__.py",
+    "mcp_config": {
+      "command": "python",
+      "args": [
+        "-m",
+        "mcp_server_odoo"
+      ],
+      "env": {
+        "ODOO_URL": "${user_config.odooUrl}",
+        "ODOO_API_KEY": "${user_config.odooApiKey}",
+        "ODOO_USER": "${user_config.odooUser}",
+        "ODOO_PASSWORD": "${user_config.odooPassword}",
+        "ODOO_DB": "${user_config.odooDb}",
+        "ODOO_YOLO": "${user_config.yoloMode}"
+      }
+    }
+  },
+  "user_config": {
+    "odooUrl": {
+      "type": "string",
+      "title": "Odoo URL",
+      "description": "The URL of your Odoo instance (e.g. https://mycompany.odoo.com)",
+      "required": true
+    },
+    "odooApiKey": {
+      "type": "string",
+      "title": "API Key",
+      "description": "Odoo API key for authentication (recommended)",
+      "sensitive": true,
+      "required": false
+    },
+    "odooUser": {
+      "type": "string",
+      "title": "Username",
+      "description": "Odoo username/login (required if API key is not used)",
+      "required": false
+    },
+    "odooPassword": {
+      "type": "string",
+      "title": "Password",
+      "description": "Odoo password (required if API key is not used)",
+      "sensitive": true,
+      "required": false
+    },
+    "odooDb": {
+      "type": "string",
+      "title": "Database Name",
+      "description": "Odoo database name (will be auto-detected if not specified)",
+      "required": false
+    },
+    "yoloMode": {
+      "type": "string",
+      "title": "YOLO Mode",
+      "description": "Bypasses safety checks. Allowed values: off, read, true",
+      "default": "off",
+      "required": false
+    }
+  },
+  "tools": [
+    {
+      "name": "odoo_search_records",
+      "description": "Search for records in any Odoo model with domain filters, sorting, and pagination"
+    },
+    {
+      "name": "odoo_get_record",
+      "description": "Get a single record by ID with specific fields"
+    },
+    {
+      "name": "odoo_create_record",
+      "description": "Create a new record in any Odoo model"
+    },
+    {
+      "name": "odoo_update_record",
+      "description": "Update one or more existing records in any Odoo model"
+    },
+    {
+      "name": "odoo_delete_record",
+      "description": "Delete one or more records in any Odoo model"
+    },
+    {
+      "name": "odoo_count_records",
+      "description": "Count records in a model matching domain filters"
+    },
+    {
+      "name": "odoo_list_models",
+      "description": "List all available Odoo model names and descriptions"
+    },
+    {
+      "name": "odoo_get_model_fields",
+      "description": "Get field definitions and types for a specific Odoo model"
+    },
+    {
+      "name": "odoo_aggregate_records",
+      "description": "Perform group by, sum, avg, or count aggregation on Odoo records"
+    },
+    {
+      "name": "odoo_post_message",
+      "description": "Post a message to a record chatter (mail.thread)"
+    },
+    {
+      "name": "odoo_log_channel_message",
+      "description": "Log an inbound/outbound email or WhatsApp message to a lead's chatter"
+    },
+    {
+      "name": "odoo_create_lead",
+      "description": "Create a new CRM lead with automatic type classification and scheduled follow-up activity"
+    },
+    {
+      "name": "odoo_search_leads",
+      "description": "Search CRM leads and opportunities"
+    },
+    {
+      "name": "odoo_create_invoice",
+      "description": "Create a customer invoice with line items"
+    },
+    {
+      "name": "odoo_search_invoices",
+      "description": "Search account invoices/moves"
+    },
+    {
+      "name": "odoo_create_purchase_order",
+      "description": "Create a vendor purchase order with lines"
+    },
+    {
+      "name": "odoo_get_stock_levels",
+      "description": "Get physical stock levels for products"
+    },
+    {
+      "name": "odoo_create_expense",
+      "description": "Create an employee expense report entry"
+    },
+    {
+      "name": "odoo_server_info",
+      "description": "Get server version and connection info"
+    },
+    {
+      "name": "odoo_create_draft_bill",
+      "description": "Create a draft vendor/customer bill (account.move)"
+    },
+    {
+      "name": "odoo_post_after_approval",
+      "description": "Post/validate a draft invoice (change state to posted)"
+    },
+    {
+      "name": "odoo_query_partners",
+      "description": "Search customers/vendors/partners"
+    },
+    {
+      "name": "odoo_get_invoices",
+      "description": "Get invoice by ID with full details"
+    },
+    {
+      "name": "odoo_update_crm_lead",
+      "description": "Update CRM lead stage, team, or assignee"
+    },
+    {
+      "name": "odoo_configure_connection",
+      "description": "Configure Odoo connection parameters at runtime"
+    }
+  ]
+}
