@@ -11,6 +11,8 @@ This file serves as the project memory and style guide for the Odoo MCP Connecto
 - [manifest.py](file:///e:/Odoo%20connector/manifest.py): Dynamic manifest generator that parses `pyproject.toml` and extracts tool schemas using `mcp_server_odoo.tools.register_all_tools(None)`. Run this script using `python manifest.py` to regenerate `manifest.json`.
 - [server.py](file:///e:/Odoo%20connector/mcp_server_odoo/server.py): Contains the core `OdooMCPServer` wrapper. To prevent connection failure crashes, always pass the server instance (`self`) to `execute_tool` instead of `self._connection`.
 - [tools.py](file:///e:/Odoo%20connector/mcp_server_odoo/tools.py): The main tool registry and execution block.
+- [__manifest__.py](file:///e:/Odoo%20connector/__manifest__.py): A dummy Odoo addon manifest so that Odoo's module scanner recognizes the repository as a valid, loadable Odoo addon and doesn't crash or complain when placed in the Odoo `addons` path.
+- [__init__.py](file:///e:/Odoo%20connector/__init__.py): Empty initialization script at the root to satisfy Odoo's loading requirements.
 
 ## Environment & Build Rules
 - **Git Push / GitHub Actions Auth**: If push/pull commands fail with invalid credential errors on this repository, temporarily unset the `GITHUB_TOKEN` environment variable (e.g., `$env:GITHUB_TOKEN=$null` in PowerShell) to allow the local CLI `keyring` credentials to be used.
