@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Odoo MCP Connector',
-    'version': '0.1.0',
-    'category': 'Tools',
-    'summary': 'MCP server for Odoo ERP - Claude AI integration',
+    'version': '16.0.1.0.0',
+    'category': 'Technical',
+    'summary': 'MCP (Model Context Protocol) Server Connector for Odoo 16',
     'description': """
-        This is an MCP (Model Context Protocol) server that allows AI assistants 
-        (like Claude Desktop/Code, VS Code, Cursor) to interact with your Odoo instance.
+        Odoo 16 MCP Connector
+        ======================
+        Enables AI assistants (Claude, Cursor, Copilot) to interact with Odoo 16 ERP data via XML-RPC and External APIs.
     """,
     'author': 'Qala Labs',
     'website': 'https://github.com/QalaLabs/odoo-mcp-connector',
-    'depends': ['base'],
+    'depends': ['base', 'web'],
     'data': [],
     'installable': True,
-    'application': False,
+    'application': True,
     'auto_install': False,
     'license': 'LGPL-3',
 }
