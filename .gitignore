@@ -1,6 +1,8 @@
 # Environment
 .env
 *.env.local
+.venv/
+.pytest_cache/
 
 # Python
 __pycache__/
