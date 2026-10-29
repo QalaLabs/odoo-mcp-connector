@@ -1,9 +1,10 @@
 """Channel integrations for WhatsApp (Convertway) and Email (Gmail)."""
 
 from __future__ import annotations
+
 import logging
-from typing import Optional
 from datetime import datetime, timedelta
+from typing import Optional
 
 from .lead_classifier import classify_lead, get_tags_for_type, get_team_for_type
 from .odoo_connection import run_sync
@@ -25,7 +26,13 @@ class ChannelAdapter:
         return run_sync(self.conn.create("crm.tag", {"name": tag_name}))
 
     def _resolve_tags(self, tag_names: list[str]) -> list[int]:
-        return [self._ensure_tag(t) for t in tag_names if t]
+        tags = []
+        for t in tag_names:
+            if t:
+                tag_id = self._ensure_tag(t)
+                if tag_id is not None:
+                    tags.append(tag_id)
+        return tags
 
     def _schedule_follow_up(self, lead_id: int, name: str, hours: int = 24):
         """Create a mail.activity for follow-up."""
@@ -39,7 +46,7 @@ class ChannelAdapter:
                 "activity_type_id": 1,
                 "date_deadline": deadline.date().isoformat(),
                 "summary": f"Follow-up: {name}",
-                "note": f"First follow-up for new lead from channel",
+                "note": "First follow-up for new lead from channel",
             }))
         except Exception as e:
             logger.warning(f"Could not schedule follow-up: {e}")

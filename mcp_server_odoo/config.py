@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
-from typing import Optional, Literal
+from typing import Literal, Optional
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-def get_env(name: str, default: str = None) -> Optional[str]:
+def get_env(name: str, default: Optional[str] = None) -> Optional[str]:
     """Get environment variable."""
     return os.environ.get(name, default)
 

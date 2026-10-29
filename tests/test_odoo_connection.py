@@ -1,7 +1,8 @@
 """Unit tests for Odoo connection layer."""
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 
 
 class TestOdooConnection:
@@ -32,7 +33,7 @@ class TestOdooConnection:
             conn.api_type = None
             conn._version = None
             conn._session = Mock()
-            
+
             assert conn.url == "https://test.odoo.com"
             assert conn.db == "test_db"
 
@@ -43,7 +44,7 @@ class TestErrorSanitizer:
     def test_sanitize_api_key(self):
         """Test API key is redacted."""
         from mcp_server_odoo.error_sanitizer import sanitize_error
-        
+
         error = Exception("Invalid api_key: abc123 secret key")
         result = sanitize_error(error)
         assert "api_key" in result.lower()
@@ -52,7 +53,7 @@ class TestErrorSanitizer:
     def test_sanitize_password(self):
         """Test password is redacted."""
         from mcp_server_odoo.error_sanitizer import sanitize_error
-        
+
         error = Exception("password: mysecretpass")
         result = sanitize_error(error)
         assert "mysecretpass" not in result
@@ -64,7 +65,7 @@ class TestFormatters:
     def test_format_record(self):
         """Test record formatting."""
         from mcp_server_odoo.formatters import format_record
-        
+
         record = {
             "id": 1,
             "display_name": "Test Partner",
@@ -78,14 +79,14 @@ class TestFormatters:
     def test_format_records_empty(self):
         """Test empty records."""
         from mcp_server_odoo.formatters import format_records
-        
+
         result = format_records([])
         assert "No records found" in result
 
     def test_format_count(self):
         """Test count formatting."""
         from mcp_server_odoo.formatters import format_count
-        
+
         result = format_count(42, "res.partner")
         assert "42" in result
         assert "res.partner" in result
@@ -93,7 +94,7 @@ class TestFormatters:
     def test_clean_html(self):
         """Test clean_html strips tags and unescapes entities."""
         from mcp_server_odoo.formatters import clean_html
-        
+
         raw_html = "<p>Invoice validated<br/>Next line &amp; &lt;details&gt;</p>"
         cleaned = clean_html(raw_html)
         assert cleaned == "Invoice validated\nNext line & <details>"
@@ -107,7 +108,7 @@ class TestSchemas:
     def test_search_records_input(self):
         """Test search input validation."""
         from mcp_server_odoo.schemas import SearchRecordsInput
-        
+
         input_data = SearchRecordsInput(
             model="res.partner",
             domain=[["name", "=", "Test"]],
@@ -119,7 +120,7 @@ class TestSchemas:
     def test_create_record_input(self):
         """Test create input validation."""
         from mcp_server_odoo.schemas import CreateRecordInput
-        
+
         input_data = CreateRecordInput(
             model="res.partner",
             values={"name": "Test", "email": "test@example.com"},
@@ -130,7 +131,7 @@ class TestSchemas:
     def test_create_lead_input(self):
         """Test lead creation input."""
         from mcp_server_odoo.schemas import CreateLeadInput
-        
+
         input_data = CreateLeadInput(
             name="Test Lead",
             email_from="test@example.com",

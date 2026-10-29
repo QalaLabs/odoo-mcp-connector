@@ -1,12 +1,12 @@
 """Performance optimizations for Odoo MCP Connector."""
 
 from __future__ import annotations
-from typing import Optional, Any
-from functools import lru_cache
+
 import threading
 import time
+from typing import Optional
 
-from .odoo_connection import OdooConnection
+from .odoo_connection import OdooConnection, run_sync
 
 
 class ConnectionPool:
@@ -27,9 +27,9 @@ class ConnectionPool:
             if self._created >= self.max_size:
                 raise RuntimeError("Connection pool exhausted")
             self._created += 1
-        
+
         conn = OdooConnection(self.config)
-        conn.connect()
+        run_sync(conn.connect())
         return conn
 
     def release(self, conn: OdooConnection) -> None:
@@ -63,19 +63,19 @@ class SmartFieldSelector:
         "activity_ids", "access_token", "password", "__last_update",
     }
 
-    def select_fields(self, model: str, fields: list = None, max_fields: int = 15) -> list:
+    def select_fields(self, model: str, fields: Optional[list] = None, max_fields: int = 15) -> list:
         """Select optimal fields for a model."""
         if fields and fields != ["__all__"]:
             return fields
-        
+
         if fields == ["__all__"]:
             return []
-        
+
         selected = list(self.ESSENTIAL_FIELDS)
-        
+
         business = self.BUSINESS_FIELDS.get(model, [])
         selected.extend(business)
-        
+
         return list(set(selected))[:max_fields]
 
     def should_skip_field(self, field_name: str, field_type: str) -> bool:
@@ -103,10 +103,10 @@ class RateLimiter:
         with self._lock:
             now = time.time()
             self._calls = [t for t in self._calls if now - t < self.window]
-            
+
             if len(self._calls) >= self.max_calls:
                 return False
-            
+
             self._calls.append(now)
             return True
 

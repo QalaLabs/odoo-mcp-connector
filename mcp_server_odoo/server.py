@@ -1,35 +1,37 @@
 """MCP Server for Odoo ERP."""
 
 from __future__ import annotations
-import logging
+
 from typing import Any, Optional
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import (
-    Tool,
+    CallToolResult,
     Resource,
     ResourceTemplate,
     TextContent,
-    CallToolResult,
+    Tool,
 )
 
 from .config import OdooConfig
+from .logging_config import setup_logging
 from .odoo_connection import OdooConnection, create_connection
-from .tools import register_all_tools
 from .resources import register_all_resources
-from .logging_config import setup_logging, get_logger
+from .tools import register_all_tools
 
 
 class OdooMCPServer:
     """Main MCP server class for Odoo integration."""
 
-    def __init__(self, config: OdooConfig = None):
+    def __init__(self, config: Optional[OdooConfig] = None):
         self.config = config or OdooConfig()
         self.logger = setup_logging(self.config)
         self._server = Server("odoo-mcp-connector")
         self._connection: Optional[OdooConnection] = None
-        
+        self._webhook_server: Optional[Any] = None
+        self._webhook_thread: Optional[Any] = None
+
         self._setup_handlers()
 
     def _setup_handlers(self) -> None:
@@ -50,7 +52,7 @@ class OdooMCPServer:
                         await self.connect()
                     except Exception:
                         pass
-                
+
                 # Execute tool using the server instance to resolve connection state dynamically
                 result = await execute_tool(self, name, arguments)
                 return result
@@ -124,7 +126,8 @@ class OdooMCPServer:
     def _start_webhook_listener(self) -> None:
         """Start webhook HTTP server on a background thread."""
         import threading
-        from .webhooks import WebhookServer, WebhookConfig
+
+        from .webhooks import WebhookConfig, WebhookServer
 
         # Don't start twice
         if hasattr(self, "_webhook_thread") and self._webhook_thread is not None:
@@ -163,14 +166,14 @@ class OdooMCPServer:
             await self.connect()
         except Exception as e:
             self.logger.error(f"Initial connection attempt failed: {e}")
-        
+
         # Start webhook server on background thread
         self._start_webhook_listener()
-        
+
         self.logger.info("Starting Odoo MCP Server...")
-        
+
         try:
-            options = self.config.model_dump()
+            options = self._server.create_initialization_options()
             async with stdio_server() as (read_stream, write_stream):
                 await self._server.run(
                     read_stream,
@@ -183,12 +186,12 @@ class OdooMCPServer:
                 self._webhook_server.shutdown()
 
 
-def create_server(config: OdooConfig = None) -> OdooMCPServer:
+def create_server(config: Optional[OdooConfig] = None) -> OdooMCPServer:
     """Create server instance."""
     return OdooMCPServer(config)
 
 
-async def run_server(config: OdooConfig = None) -> None:
+async def run_server(config: Optional[OdooConfig] = None) -> None:
     """Run the server."""
     server = OdooMCPServer(config)
     await server.run()

@@ -4,8 +4,10 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir uv
 
-COPY pyproject.toml ./
-RUN uv pip install --system -e .
+COPY pyproject.toml README.md ./
+COPY mcp_server_odoo/ ./mcp_server_odoo/
+
+RUN uv pip install --system .
 
 ENV ODOO_MCP_TRANSPORT=stdio
 

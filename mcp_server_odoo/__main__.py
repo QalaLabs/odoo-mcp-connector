@@ -1,17 +1,17 @@
 """CLI entry point for Odoo MCP Connector."""
 
 from __future__ import annotations
-import sys
+
 import asyncio
-import os
+import sys
 
 
 def main():
     """Main entry point."""
     try:
-        from .server import run_server
         from .config import load_config
-        from .logging_config import get_logger, setup_logging
+        from .logging_config import setup_logging
+        from .server import run_server
 
         config = load_config()
         logger = setup_logging(config)

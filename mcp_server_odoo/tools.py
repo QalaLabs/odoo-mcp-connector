@@ -1,57 +1,57 @@
 """MCP tools registry and executor."""
 
 from __future__ import annotations
-import logging
-from typing import Any, Optional
-from datetime import datetime, timedelta
 
-from mcp.types import Tool, TextContent, CallToolResult
-from .odoo_connection import OdooConnection
-from .error_handling import OdooMCPError
+import logging
+from datetime import datetime, timedelta
+from typing import Any, Optional
+
+from mcp.types import CallToolResult, TextContent, Tool
+from pydantic import ValidationError as PydanticValidationError
+
+from .error_handling import YOLOAccessError
 from .error_sanitizer import sanitize_error
 from .formatters import (
+    format_channel_log,
+    format_count,
+    format_field_info,
+    format_record_activity,
     format_records,
     format_search_result,
-    format_field_info,
-    format_count,
-    format_lead,
-    format_channel_log,
-    format_record_activity,
 )
-from pydantic import ValidationError as PydanticValidationError
+from .odoo_connection import OdooConnection
 from .schemas import (
-    SearchRecordsInput,
-    GetRecordInput,
-    CreateRecordInput,
-    UpdateRecordInput,
-    DeleteRecordInput,
     AggregateRecordsInput,
-    PostMessageInput,
-    LogChannelMessageInput,
-    CreateLeadInput,
-    CreateInvoiceInput,
-    CreatePurchaseOrderInput,
-    CreateExpenseInput,
-    CountRecordsInput,
-    GetModelFieldsInput,
-    SearchLeadsInput,
-    SearchInvoicesInput,
-    GetStockLevelsInput,
-    CreateDraftBillInput,
-    PostAfterApprovalInput,
-    QueryPartnersInput,
-    GetInvoicesInput,
-    UpdateCrmLeadInput,
     ConfigureConnectionInput,
+    CountRecordsInput,
+    CreateDraftBillInput,
+    CreateExpenseInput,
+    CreateInvoiceInput,
+    CreateLeadInput,
+    CreatePurchaseOrderInput,
+    CreateRecordInput,
+    DeleteRecordInput,
     GetInvoiceActivityInput,
+    GetInvoicesInput,
+    GetModelFieldsInput,
     GetRecordActivityInput,
+    GetRecordInput,
+    GetStockLevelsInput,
+    LogChannelMessageInput,
+    PostAfterApprovalInput,
+    PostMessageInput,
+    QueryPartnersInput,
+    SearchInvoicesInput,
+    SearchLeadsInput,
+    SearchRecordsInput,
+    UpdateCrmLeadInput,
+    UpdateRecordInput,
 )
-from .error_handling import OdooMCPError, YOLOAccessError
 
 logger = logging.getLogger(__name__)
 
 
-def register_all_tools(connection: OdooConnection) -> list[Tool]:
+def register_all_tools(connection: Optional[OdooConnection] = None) -> list[Tool]:
     """Register all available MCP tools."""
     tools = [
         Tool(
@@ -477,7 +477,7 @@ Timestamp: {ts}
 From: {args.get('from_number', 'N/A')}
 
 {args['message']}"""
-    
+
     await conn.call_method(
         "crm.lead",
         "message_post",
@@ -498,20 +498,20 @@ async def _create_lead(conn: OdooConnection, args: dict) -> CallToolResult:
         "type": args.get("lead_type", "lead"),
         "priority": args.get("priority", "2"),
     }
-    
+
     for field in ("contact_name", "email_from", "phone", "partner_name", "description",
                  "pipeline_id", "team_id", "user_id", "expected_revenue"):
         if args.get(field):
             values[field] = args[field]
-    
+
     if args.get("tag_ids"):
         values["tag_ids"] = [(6, 0, args["tag_ids"])]
-    
+
     lead_id = await conn.create("crm.lead", values)
-    
+
     follow_up_hours = args.get("scheduled_follow_up_hours", 24)
     deadline = datetime.now() + timedelta(hours=follow_up_hours)
-    
+
     try:
         res_model_id = await conn.call_method("ir.model", "search", args=[["model", "=", "crm.lead"]])
         activity_vals = {
@@ -525,14 +525,14 @@ async def _create_lead(conn: OdooConnection, args: dict) -> CallToolResult:
         await conn.create("mail.activity", activity_vals)
     except Exception as e:
         logger.warning(f"Could not create follow-up activity: {e}")
-    
+
     text = f"""## Lead Created
 
 **ID:** {lead_id}
 **Name:** {args['name']}
 **Type:** {args.get('lead_type', 'lead')}
 **Follow-up Scheduled:** {deadline.isoformat()}"""
-    
+
     return CallToolResult(content=[TextContent(type="text", text=text)])
 
 
@@ -542,7 +542,7 @@ async def _search_leads(conn: OdooConnection, args: dict) -> CallToolResult:
     if not domain:
         domain = []
     domain.insert(0, ["type", "in", ["lead", "opportunity"]])
-    
+
     records = await conn.search_read(
         "crm.lead",
         domain=domain,
@@ -563,7 +563,7 @@ async def _create_invoice(conn: OdooConnection, args: dict) -> CallToolResult:
         values["date"] = args["date"]
     if args.get("invoice_line_ids"):
         values["invoice_line_ids"] = args["invoice_line_ids"]
-    
+
     invoice_id = await conn.create("account.move", values)
     return CallToolResult(content=[TextContent(type="text", text=f"Created invoice ID: {invoice_id}")])
 
@@ -576,7 +576,7 @@ async def _search_invoices(conn: OdooConnection, args: dict) -> CallToolResult:
         domain.append(["state", "=", state])
     if not any("move_type" in str(d) for d in domain):
         domain.append(["move_type", "=", "out_invoice"])
-    
+
     records = await conn.search_read(
         "account.move",
         domain=domain,
@@ -595,7 +595,7 @@ async def _create_purchase_order(conn: OdooConnection, args: dict) -> CallToolRe
         values["order_line"] = args["order_line"]
     if args.get("notes"):
         values["notes"] = args["notes"]
-    
+
     po_id = await conn.create("purchase.order", values)
     return CallToolResult(content=[TextContent(type="text", text=f"Created purchase order ID: {po_id}")])
 
@@ -607,7 +607,7 @@ async def _get_stock_levels(conn: OdooConnection, args: dict) -> CallToolResult:
         domain.append(["product_id", "in", args["product_ids"]])
     if args.get("location_id"):
         domain.append(["location_id", "=", args["location_id"]])
-    
+
     quants = await conn.search_read(
         "stock.quant",
         domain=domain,
@@ -631,7 +631,7 @@ async def _create_expense(conn: OdooConnection, args: dict) -> CallToolResult:
         values["employee_id"] = args["employee_id"]
     if args.get("description"):
         values["description"] = args["description"]
-    
+
     expense_id = await conn.create("hr.expense", values)
     return CallToolResult(content=[TextContent(type="text", text=f"Created expense ID: {expense_id}")])
 
@@ -909,7 +909,7 @@ async def _configure_connection(server: Any, arguments: dict) -> CallToolResult:
                 content=[TextContent(type="text", text="Failed to establish connection with new parameters")],
                 isError=True,
             )
-        
+
         version = conn.version
         text = f"""## Odoo Connection Configured Successfully
 

@@ -1,11 +1,11 @@
 """Logging configuration for Odoo MCP Connector."""
 
 from __future__ import annotations
+
+import json
 import logging
 import sys
-import json
 from datetime import datetime
-from typing import Optional
 
 from .config import OdooConfig
 
@@ -30,30 +30,30 @@ class JSONFormatter(logging.Formatter):
 def setup_logging(config: OdooConfig) -> logging.Logger:
     """Configure logging based on config."""
     log_level = getattr(logging, config.mcp_log_level, logging.INFO)
-    
+
     # Configure root logger to output to stderr to prevent any library from printing to stdout
     logging.basicConfig(level=log_level, stream=sys.stderr, force=True)
-    
+
     logger = logging.getLogger("mcp_server_odoo")
     logger.setLevel(log_level)
-    
+
     logger.handlers.clear()
-    
+
     handler = logging.StreamHandler(sys.stderr)
     handler.setLevel(logging.DEBUG)
-    
+
     if config.mcp_log_json:
         handler.setFormatter(JSONFormatter())
     else:
         fmt = "%(asctime)s | %(levelname)-8s | %(message)s"
         handler.setFormatter(logging.Formatter(fmt))
-    
+
     logger.addHandler(handler)
-    
+
     # Silence verbose logs from requests and urllib3 to avoid cluttering stderr
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)
-    
+
     return logger
 
 

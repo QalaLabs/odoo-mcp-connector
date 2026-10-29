@@ -1,5 +1,7 @@
 """Custom exceptions for Odoo MCP Connector."""
 
+from typing import Optional
+
 
 class OdooMCPError(Exception):
     """Base exception for Odoo MCP errors."""
@@ -27,7 +29,7 @@ class PermissionError(OdooMCPError):
 class ValidationError(OdooMCPError):
     """Validation failed."""
 
-    def __init__(self, message: str, field: str = None):
+    def __init__(self, message: str, field: Optional[str] = None):
         self.field = field
         super().__init__(message, code="VALIDATION_ERROR")
 
@@ -35,7 +37,7 @@ class ValidationError(OdooMCPError):
 class NotFoundError(OdooMCPError):
     """Record not found."""
 
-    def __init__(self, model: str, record_id: int = None):
+    def __init__(self, model: str, record_id: Optional[int] = None):
         msg = f"Record not found in {model}"
         if record_id:
             msg += f" (ID: {record_id})"

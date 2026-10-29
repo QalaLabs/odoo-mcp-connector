@@ -6,7 +6,7 @@ Sales, Purchase, Inventory, and Expenses modules.
 
 Based on concepts from:
 - mcp-server-odoo (ivnvxd) - MPL-2.0
-- odoo-mcp-pro (Pantalytics) - Elastic 2.0  
+- odoo-mcp-pro (Pantalytics) - Elastic 2.0
 - claude-odoo-api (bmya) - MIT
 """
 
@@ -15,22 +15,22 @@ __author__ = "Developer"
 __license__ = "MIT"
 
 from .config import OdooConfig, load_config
-from .odoo_connection import OdooConnection, OdooConnectionError, create_connection
-from .server import OdooMCPServer
 from .error_handling import (
-    OdooMCPError,
     AuthenticationError,
+    NotFoundError,
+    OdooMCPError,
     PermissionError,
     ValidationError,
-    NotFoundError,
-)
-from .schemas import (
-    SearchResult,
-    RecordData,
-    ModelInfo,
-    FieldInfo,
 )
 from .lead_classifier import classify_lead
+from .odoo_connection import OdooConnection, OdooConnectionError, create_connection
+from .schemas import (
+    FieldInfo,
+    ModelInfo,
+    RecordData,
+    SearchResult,
+)
+from .server import OdooMCPServer
 
 __all__ = [
     "__version__",

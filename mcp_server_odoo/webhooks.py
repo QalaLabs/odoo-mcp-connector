@@ -1,14 +1,18 @@
 """Webhook endpoints for lead capture from website contact forms."""
 
 from __future__ import annotations
+
 import hashlib
 import hmac
 import json
 import logging
-from typing import Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import TYPE_CHECKING, Optional, cast
+
+if TYPE_CHECKING:
+    from .odoo_connection import OdooConnection
 
 from .lead_classifier import classify_lead, get_tags_for_type, get_team_for_type
 from .odoo_connection import run_sync
@@ -47,6 +51,10 @@ class ClassificationData:
 
 class WebhookHandler(BaseHTTPRequestHandler):
     """HTTP handler for webhook requests."""
+
+    @property
+    def webhook_server(self) -> WebhookServer:
+        return cast(WebhookServer, self.server)
 
     def log_message(self, format, *args):
         logger.info(format % args)
@@ -94,7 +102,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": str(e)}).encode())
 
     def _verify_auth(self, body: bytes) -> bool:
-        config = self.server.config
+        config = self.webhook_server.config
         if config.api_key:
             auth = self.headers.get("Authorization", "")
             return auth == f"Bearer {config.api_key}"
@@ -128,10 +136,10 @@ class WebhookHandler(BaseHTTPRequestHandler):
             source=contact.source,
         )
 
-        if not self.server.odoo_connection:
+        if not self.webhook_server.odoo_connection:
             return {"lead_id": None, "classification": classification}
 
-        conn = self.server.odoo_connection
+        conn = self.webhook_server.odoo_connection
         tag_names = get_tags_for_type(classification["lead_type"])
         tag_ids = []
         for t in tag_names:
@@ -206,7 +214,7 @@ class WebhookServer(HTTPServer):
     def __init__(self, config: WebhookConfig):
         super().__init__((config.host, config.port), WebhookHandler)
         self.config = config
-        self.odoo_connection = None
+        self.odoo_connection: Optional[OdooConnection] = None
 
 
 def start_webhook_server(config: WebhookConfig, odoo_conn=None):

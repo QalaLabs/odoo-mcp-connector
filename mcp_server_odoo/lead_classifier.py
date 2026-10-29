@@ -1,8 +1,8 @@
 """Lead classification for multi-channel CRM intake."""
 
 from __future__ import annotations
-from typing import Optional
 
+from typing import Optional
 
 # Tag name constants for Odoo crm.tag model
 TAG_SUPPORT = "Support"
@@ -44,7 +44,7 @@ def classify_lead(
     """
     lead_type = "lead"
     team_id = None
-    tag_ids = []
+    tag_ids: list[int] = []
     priority = "2"
 
     company = company or ""
@@ -91,7 +91,7 @@ def get_tags_for_type(lead_type: str, source: str = "") -> list[str]:
 
 def get_team_for_type(lead_type: str) -> Optional[int]:
     """Return default team ID by lead type.
-    
+
     Override with ODOO_TEAM_B2B, ODOO_TEAM_B2C, ODOO_TEAM_SUPPORT env vars.
     """
     import os

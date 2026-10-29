@@ -1,8 +1,9 @@
 """Sanitize Odoo error messages for safe client responses."""
 
 from __future__ import annotations
-import re
+
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def sanitize_error(error: Exception) -> str:
     message = str(error)
     for pattern, replacement in SENSITIVE_PATTERNS:
         message = pattern.sub(replacement, message)
-    if any(p in message for p in ["Traceback", "File \""]):
+    if any(p in message for p in ["Traceback", 'File "']):
         message = sanitize_stack_trace(message)
     return message
 

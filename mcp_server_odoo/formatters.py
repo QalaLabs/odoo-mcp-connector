@@ -1,23 +1,23 @@
 """Formatting utilities for LLM-friendly output."""
 
 from __future__ import annotations
+
 import html
 import re
 from typing import Any, Optional
-from datetime import datetime
 
 
-def format_record(record: dict, model: str = None) -> str:
+def format_record(record: dict, model: Optional[str] = None) -> str:
     """Format a single record for LLM display."""
     lines = []
     if model:
         lines.append(f"## {model}")
-    
+
     for key, value in record.items():
         if key.startswith("_") or value is None:
             continue
         formatted_key = key.replace("_", " ").title()
-        
+
         if isinstance(value, list) and value and isinstance(value[0], dict):
             lines.append(f"### {formatted_key}")
             for item in value[:5]:
@@ -26,15 +26,15 @@ def format_record(record: dict, model: str = None) -> str:
             lines.append(f"{formatted_key}: {value.get('display_name', value.get('id', 'N/A'))}")
         elif isinstance(value, (int, float, str)):
             lines.append(f"{formatted_key}: {value}")
-    
+
     return "\n".join(lines)
 
 
-def format_records(records: list[dict], model: str = None) -> str:
+def format_records(records: list[dict], model: Optional[str] = None) -> str:
     """Format multiple records for LLM display."""
     if not records:
         return "No records found."
-    
+
     lines = [f"## {model or 'Records'} ({len(records)} found)"]
     lines.append("")
     for i, record in enumerate(records, 1):
@@ -47,55 +47,55 @@ def format_records(records: list[dict], model: str = None) -> str:
             if isinstance(value, (int, float, str)):
                 lines.append(f"- {formatted_key}: {value}")
         lines.append("")
-    
+
     return "\n".join(lines)
 
 
-def format_search_result(result: dict, model: str = None) -> str:
+def format_search_result(result: dict, model: Optional[str] = None) -> str:
     """Format search result for LLM display."""
     count = result.get("count", 0)
     records = result.get("records", [])
-    
+
     lines = [f"## Search Results for {model or 'model'}"]
     lines.append(f"**Total: {count} records**")
     lines.append("")
-    
+
     if records:
         lines.append(format_records(records, model))
     else:
         lines.append("No records match the search criteria.")
-    
+
     return "\n".join(lines)
 
 
 def format_field_info(fields: dict) -> str:
     """Format fields_get response for LLM display."""
     lines = ["## Model Fields"]
-    
+
     for name, info in fields.items():
         field_type = info.get("type", "unknown")
         string = info.get("string", name)
         required = " (required)" if info.get("required") else ""
         readonly = " [readonly]" if info.get("readonly") else ""
-        
+
         lines.append(f"- **{name}**{required}{readonly}")
         lines.append(f"  - Type: {field_type}")
         lines.append(f"  - Label: {string}")
-        
+
         if info.get("help"):
             lines.append(f"  - Help: {info['help']}")
-        
+
         if info.get("relation"):
             lines.append(f"  - Relation: {info['relation']}")
-        
+
         if info.get("selection"):
             options = ", ".join(f"`{k}: {v}`" for k, v in info["selection"])
             lines.append(f"  - Options: {options}")
-    
+
     return "\n".join(lines)
 
 
-def format_error(error: str, code: str = None) -> str:
+def format_error(error: str, code: Optional[str] = None) -> str:
     """Format error for LLM display."""
     lines = ["## Error"]
     if code:
@@ -113,12 +113,12 @@ def format_aggregate(result: list[dict], groupby: list[str]) -> str:
     """Format aggregation result for LLM display."""
     if not result:
         return "No aggregated data found."
-    
+
     lines = ["## Aggregation Results"]
     if groupby:
         lines.append(f"Grouped by: {', '.join(groupby)}")
     lines.append("")
-    
+
     for i, group in enumerate(result, 1):
         lines.append(f"### Group {i}")
         for key, value in group.items():
@@ -131,7 +131,7 @@ def format_aggregate(result: list[dict], groupby: list[str]) -> str:
             else:
                 lines.append(f"- {key.replace('_', ' ').title()}: {value}")
         lines.append("")
-    
+
     return "\n".join(lines)
 
 
@@ -143,26 +143,26 @@ def format_lead(lead: dict) -> str:
     lines.append(f"**Stage:** {lead.get('stage_id', (0, 'Unknown'))[1] if isinstance(lead.get('stage_id'), (list, tuple)) else 'N/A'}")
     lines.append(f"**Priority:** {lead.get('priority', 'N/A')}")
     lines.append("")
-    
+
     contact_info = [
         ("Email", "email_from"),
         ("Phone", "phone"),
         ("Company", "partner_name"),
         ("Source", "source_id"),
     ]
-    
+
     for label, field in contact_info:
         value = lead.get(field)
         if value:
             if isinstance(value, (list, tuple)) and len(value) > 1:
                 value = value[1]
             lines.append(f"**{label}:** {value}")
-    
+
     if lead.get("description"):
         lines.append("")
         lines.append("**Description:**")
         lines.append(lead["description"])
-    
+
     return "\n".join(lines)
 
 
@@ -188,15 +188,15 @@ def clean_html(text: str) -> str:
     if not text:
         return ""
     # Convert <br> and </p> tags to newlines
-    text = re.sub(r'(?i)<br\s*/?>', '\n', text)
-    text = re.sub(r'(?i)</p>', '\n', text)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</p>", "\n", text)
     # Remove all remaining HTML tags
-    text = re.sub(r'<[^>]+>', '', text)
+    text = re.sub(r"<[^>]+>", "", text)
     # Unescape HTML entities
     text = html.unescape(text)
     # Clean up whitespace line by line
     lines = [line.strip() for line in text.splitlines()]
-    cleaned = []
+    cleaned: list[str] = []
     for line in lines:
         if line or (cleaned and cleaned[-1]):
             cleaned.append(line)
@@ -272,7 +272,7 @@ def format_record_activity(
 
         # Append field tracking changes
         msg_id = msg.get("id")
-        tracking_vals = tracking_map.get(msg_id, [])
+        tracking_vals = tracking_map.get(int(msg_id), []) if msg_id is not None else []
         for tv in tracking_vals:
             field = tv.get("field_desc") or tv.get("field_info") or "Field"
             old_val = _get_tracking_val(tv, "old")

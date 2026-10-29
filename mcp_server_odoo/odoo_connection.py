@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from typing import Any, Optional, Literal
-from dataclasses import dataclass
 import xmlrpc.client
+from dataclasses import dataclass
+from typing import Any, Literal, Optional
 
 import httpx
 import requests
 
 from .config import OdooConfig
-from .error_handling import OdooConnectionError, AuthenticationError
+from .error_handling import AuthenticationError, OdooConnectionError
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +60,7 @@ class OdooConnection:
         """Authenticate using API key."""
         if not self.db:
             self.db = self._get_database_from_url()
-        
+
         auth_data = {
             "db": self.db,
             "api_key": self.config.api_key,
@@ -98,7 +97,7 @@ class OdooConnection:
             self.config.password,
             {}
         )
-        if not uid:
+        if not uid or not isinstance(uid, int):
             raise AuthenticationError("Authentication failed")
         return uid
 
@@ -153,15 +152,15 @@ class OdooConnection:
         """Execute via JSON/2 API (Odoo 19+)."""
         headers = {"Authorization": f"Bearer {self.config.api_key}"}
         if self.config.api_key:
-            headers["X-Odoo-Database"] = self.db
-        
+            headers["X-Odoo-Database"] = self.db or ""
+
         payload = {
             "params": {
                 "args": args,
                 "kwargs": kwargs,
             }
         }
-        
+
         url = f"{self.url}/json/2/{model}/{method}"
         try:
             response = self._session.post(
@@ -196,11 +195,11 @@ class OdooConnection:
     async def search_read(
         self,
         model: str,
-        domain: list = None,
-        fields: list = None,
+        domain: Optional[list] = None,
+        fields: Optional[list] = None,
         limit: int = 10,
         offset: int = 0,
-        order: str = None,
+        order: Optional[str] = None,
     ) -> list[dict]:
         """Search and read records."""
         domain = domain or []
@@ -208,7 +207,7 @@ class OdooConnection:
             fields = ["id", "display_name"]
         elif fields == "__all__":
             fields = []
-        
+
         kwargs: dict = {
             "domain": domain,
             "fields": fields,
@@ -218,10 +217,10 @@ class OdooConnection:
             kwargs["offset"] = offset
         if order:
             kwargs["order"] = order
-        
+
         return await self.execute(model, "search_read", [], kwargs)
 
-    async def search(self, model: str, domain: list = None, limit: int = None) -> list[int]:
+    async def search(self, model: str, domain: Optional[list] = None, limit: Optional[int] = None) -> list[int]:
         """Search for record IDs."""
         domain = domain or []
         kwargs: dict = {}
@@ -229,12 +228,12 @@ class OdooConnection:
             kwargs["limit"] = limit
         return await self.execute(model, "search", [domain], kwargs)
 
-    async def count(self, model: str, domain: list = None) -> int:
+    async def count(self, model: str, domain: Optional[list] = None) -> int:
         """Count records matching domain."""
         domain = domain or []
         return await self.execute(model, "search_count", [domain], {})
 
-    async def read(self, model: str, ids: list[int], fields: list = None) -> list[dict]:
+    async def read(self, model: str, ids: list[int], fields: Optional[list] = None) -> list[dict]:
         """Read specific records by IDs."""
         if fields is None:
             fields = ["id", "display_name"]
@@ -254,12 +253,12 @@ class OdooConnection:
         """Delete records."""
         return await self.execute(model, "unlink", [ids], {})
 
-    async def fields_get(self, model: str, attributes: list = None) -> dict:
+    async def fields_get(self, model: str, attributes: Optional[list] = None) -> dict:
         """Get field definitions for a model."""
         attrs = attributes or ["name", "type", "string", "help", "required", "readonly"]
         return await self.execute(model, "fields_get", [], {"attributes": attrs})
 
-    async def call_method(self, model: str, method: str, args: list = None, kwargs: dict = None) -> Any:
+    async def call_method(self, model: str, method: str, args: Optional[list] = None, kwargs: Optional[dict] = None) -> Any:
         """Call arbitrary model method."""
         args = args or []
         kwargs = kwargs or {}
@@ -282,7 +281,7 @@ class OdooConnection:
         return self._version or OdooVersion(major=0, minor=0, api_type="xmlrpc")
 
 
-async def create_connection(config: OdooConfig = None) -> OdooConnection:
+async def create_connection(config: Optional[OdooConfig] = None) -> OdooConnection:
     """Create and connect to Odoo instance."""
     if config is None:
         config = load_config()
