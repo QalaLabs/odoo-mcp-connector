@@ -177,6 +177,14 @@
     {
       "name": "odoo_configure_connection",
       "description": "Configure Odoo connection parameters at runtime"
+    },
+    {
+      "name": "odoo_get_invoice_activity",
+      "description": "Get complete invoice activity timeline combining chatter, field changes (audit log), and scheduled activities"
+    },
+    {
+      "name": "odoo_get_record_activity",
+      "description": "Get activity timeline for any record (account.move, crm.lead, sale.order, etc.) combining chatter, tracking values, and activities"
     }
   ]
 }

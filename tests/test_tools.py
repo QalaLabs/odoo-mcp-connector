@@ -72,6 +72,8 @@ def test_register_all_tools(mock_connection):
     assert "odoo_update_record" in tool_names
     assert "odoo_delete_record" in tool_names
     assert "odoo_configure_connection" in tool_names
+    assert "odoo_get_invoice_activity" in tool_names
+    assert "odoo_get_record_activity" in tool_names
 
 
 @pytest.mark.asyncio
@@ -184,3 +186,115 @@ async def test_execute_tool_disconnected():
     assert result_server.isError
     assert "Not connected to Odoo" in result_server.content[0].text
     mock_server.connect.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_get_invoice_activity_combined(mock_connection):
+    """Test get_invoice_activity combines mail.activity, mail.message, and mail.tracking.value."""
+    # Setup mock returns based on model
+    async def mock_search_read(model, domain=None, fields=None, limit=None, offset=0, order=None):
+        if model == "mail.activity":
+            return [
+                {
+                    "id": 10,
+                    "activity_type_id": [1, "To-Do"],
+                    "summary": "Follow up payment",
+                    "date_deadline": "2026-09-05",
+                    "user_id": [2, "Operations"],
+                    "state": "planned",
+                    "note": "<p>Call customer regarding invoice</p>",
+                }
+            ]
+        elif model == "mail.message":
+            return [
+                {
+                    "id": 101,
+                    "date": "2026-08-31 15:45:00",
+                    "author_id": [2, "Delhi Accounts"],
+                    "body": "<p>Invoice validated</p>",
+                    "subject": False,
+                    "tracking_value_ids": [501],
+                },
+                {
+                    "id": 102,
+                    "date": "2026-08-31 15:40:00",
+                    "author_id": [2, "Delhi Accounts"],
+                    "body": "",
+                    "subject": False,
+                    "tracking_value_ids": [502],
+                },
+                {
+                    "id": 103,
+                    "date": "2026-08-31 13:28:00",
+                    "author_id": [3, "Operations"],
+                    "body": "<p>This journal entry has been created from: <a href='#'>SO2013815</a></p>",
+                    "subject": False,
+                    "tracking_value_ids": [],
+                },
+            ]
+        elif model == "mail.tracking.value":
+            return [
+                {
+                    "id": 501,
+                    "mail_message_id": [101, "Message 101"],
+                    "field_desc": "Status",
+                    "old_value_char": "Draft",
+                    "new_value_char": "Posted",
+                },
+                {
+                    "id": 502,
+                    "mail_message_id": [102, "Message 102"],
+                    "field_desc": "Status",
+                    "old_value_char": "Posted",
+                    "new_value_char": "Draft",
+                },
+            ]
+        return []
+
+    mock_connection.search_read = AsyncMock(side_effect=mock_search_read)
+    mock_connection.read = AsyncMock(return_value=[{"id": 1234, "display_name": "INV/2026/0001"}])
+
+    result = await execute_tool(mock_connection, "odoo_get_invoice_activity", {"invoice_id": 1234})
+    assert not result.isError
+    text = result.content[0].text
+
+    # Header check
+    assert "Activity Timeline for account.move #1234 (INV/2026/0001)" in text
+
+    # Scheduled activity check
+    assert "Scheduled Activities (1 pending)" in text
+    assert "[To-Do]" in text
+    assert "Follow up payment" in text
+    assert "**Assigned to:** Operations" in text
+    assert "**Due:** 2026-09-05 (Planned)" in text
+    assert "Call customer regarding invoice" in text
+
+    # Chatter history & tracking checks matching chatter UI
+    assert "Chatter History & Audit Log" in text
+    assert "[2026-08-31 15:45:00] Delhi Accounts" in text
+    assert "Invoice validated" in text
+    assert "• Draft → Posted (Status)" in text
+
+    assert "[2026-08-31 15:40:00] Delhi Accounts" in text
+    assert "• Posted → Draft (Status)" in text
+
+    assert "[2026-08-31 13:28:00] Operations" in text
+    assert "This journal entry has been created from: SO2013815" in text
+
+
+@pytest.mark.asyncio
+async def test_get_record_activity_generic(mock_connection):
+    """Test get_record_activity works for any model like crm.lead."""
+    mock_connection.search_read = AsyncMock(return_value=[])
+    mock_connection.read = AsyncMock(return_value=[{"id": 45, "display_name": "Acme Lead"}])
+
+    result = await execute_tool(
+        mock_connection,
+        "odoo_get_record_activity",
+        {"model": "crm.lead", "record_id": 45},
+    )
+    assert not result.isError
+    text = result.content[0].text
+    assert "Activity Timeline for crm.lead #45 (Acme Lead)" in text
+    assert "No activity or chatter messages recorded." in text
+

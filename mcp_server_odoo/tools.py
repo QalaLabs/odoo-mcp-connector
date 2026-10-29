@@ -16,6 +16,7 @@ from .formatters import (
     format_count,
     format_lead,
     format_channel_log,
+    format_record_activity,
 )
 from pydantic import ValidationError as PydanticValidationError
 from .schemas import (
@@ -42,6 +43,8 @@ from .schemas import (
     GetInvoicesInput,
     UpdateCrmLeadInput,
     ConfigureConnectionInput,
+    GetInvoiceActivityInput,
+    GetRecordActivityInput,
 )
 from .error_handling import OdooMCPError, YOLOAccessError
 
@@ -176,6 +179,16 @@ def register_all_tools(connection: OdooConnection) -> list[Tool]:
             description="Configure Odoo connection parameters at runtime",
             inputSchema=ConfigureConnectionInput.model_json_schema(),
         ),
+        Tool(
+            name="odoo_get_invoice_activity",
+            description="Get complete invoice activity timeline combining chatter, field changes (audit log), and scheduled activities",
+            inputSchema=GetInvoiceActivityInput.model_json_schema(),
+        ),
+        Tool(
+            name="odoo_get_record_activity",
+            description="Get activity timeline for any record (account.move, crm.lead, sale.order, etc.) combining chatter, tracking values, and activities",
+            inputSchema=GetRecordActivityInput.model_json_schema(),
+        ),
     ]
     return tools
 
@@ -220,6 +233,8 @@ TOOL_SCHEMAS = {
     "get_invoices": GetInvoicesInput,
     "update_crm_lead": UpdateCrmLeadInput,
     "configure_connection": ConfigureConnectionInput,
+    "get_invoice_activity": GetInvoiceActivityInput,
+    "get_record_activity": GetRecordActivityInput,
 }
 
 
@@ -335,6 +350,10 @@ async def execute_tool(
             return await _get_invoices(connection, validated_args)
         elif tool_name == "update_crm_lead":
             return await _update_crm_lead(connection, validated_args)
+        elif tool_name == "get_invoice_activity":
+            return await _get_invoice_activity(connection, validated_args)
+        elif tool_name == "get_record_activity":
+            return await _get_record_activity(connection, validated_args)
         else:
             return CallToolResult(
                 content=[TextContent(type="text", text=f"Unknown tool: {name}")],
@@ -734,6 +753,127 @@ async def _update_crm_lead(conn: OdooConnection, args: dict) -> CallToolResult:
     return CallToolResult(content=[TextContent(
         type="text", text=f"Updated lead ID {lead_id}: {updated}"
     )])
+
+
+async def _fetch_record_activity(
+    conn: OdooConnection, model: str, record_id: int, limit: int = 30
+) -> CallToolResult:
+    """Fetch combined activity, chatter messages, and tracking audit logs for a record."""
+    record_name = None
+    try:
+        rec = await conn.read(model, [record_id], ["display_name", "name"])
+        if rec:
+            record_name = rec[0].get("display_name") or rec[0].get("name")
+    except Exception as e:
+        logger.debug(f"Could not read record name for {model} #{record_id}: {e}")
+
+    # 1. Fetch pending activities
+    activities = []
+    try:
+        activities = await conn.search_read(
+            "mail.activity",
+            domain=[["res_model", "=", model], ["res_id", "=", record_id]],
+            fields=["activity_type_id", "summary", "date_deadline", "user_id", "state", "note"],
+            order="date_deadline asc",
+        )
+    except Exception as e:
+        logger.debug(f"Could not fetch mail.activity for {model} #{record_id}: {e}")
+
+    # 2. Fetch chatter messages
+    messages = []
+    try:
+        messages = await conn.search_read(
+            "mail.message",
+            domain=[["model", "=", model], ["res_id", "=", record_id]],
+            fields=["id", "date", "author_id", "body", "subject", "message_type", "subtype_id", "tracking_value_ids"],
+            order="date desc, id desc",
+            limit=limit,
+        )
+    except Exception as e:
+        logger.debug(f"Could not fetch mail.message for {model} #{record_id}: {e}")
+
+    # 3. Fetch tracking values
+    tracking_map: dict[int, list[dict]] = {}
+    all_tv_ids = []
+    msg_id_map = {}
+    for m in messages:
+        tv_ids = m.get("tracking_value_ids") or []
+        for tid in tv_ids:
+            all_tv_ids.append(tid)
+            msg_id_map[tid] = m.get("id")
+
+    tv_fields = [
+        "id", "mail_message_id", "field_desc", "field_info",
+        "old_value_char", "new_value_char",
+        "old_value_text", "new_value_text",
+        "old_value_integer", "new_value_integer",
+        "old_value_float", "new_value_float",
+        "old_value_monetary", "new_value_monetary",
+        "old_value_datetime", "new_value_datetime",
+    ]
+
+    tracking_records = []
+    if all_tv_ids:
+        try:
+            tracking_records = await conn.search_read(
+                "mail.tracking.value",
+                domain=[["id", "in", all_tv_ids]],
+                fields=tv_fields,
+            )
+        except Exception as e:
+            logger.debug(f"Could not fetch mail.tracking.value by id: {e}")
+    elif messages:
+        msg_ids = [m["id"] for m in messages if m.get("id")]
+        if msg_ids:
+            try:
+                tracking_records = await conn.search_read(
+                    "mail.tracking.value",
+                    domain=[["mail_message_id", "in", msg_ids]],
+                    fields=tv_fields,
+                )
+            except Exception as e:
+                logger.debug(f"Could not fetch mail.tracking.value by mail_message_id: {e}")
+
+    for tv in tracking_records:
+        msg_val = tv.get("mail_message_id")
+        if isinstance(msg_val, (list, tuple)) and msg_val:
+            m_id = msg_val[0]
+        elif isinstance(msg_val, int):
+            m_id = msg_val
+        else:
+            m_id = msg_id_map.get(tv.get("id"))
+        if m_id:
+            tracking_map.setdefault(m_id, []).append(tv)
+
+    text = format_record_activity(
+        model=model,
+        record_id=record_id,
+        activities=activities,
+        messages=messages,
+        tracking_map=tracking_map,
+        record_name=record_name,
+    )
+    return CallToolResult(content=[TextContent(type="text", text=text)])
+
+
+async def _get_invoice_activity(conn: OdooConnection, args: dict) -> CallToolResult:
+    """Get activity timeline for an invoice."""
+    return await _fetch_record_activity(
+        conn=conn,
+        model="account.move",
+        record_id=args["invoice_id"],
+        limit=args.get("limit", 30),
+    )
+
+
+async def _get_record_activity(conn: OdooConnection, args: dict) -> CallToolResult:
+    """Get activity timeline for any record."""
+    return await _fetch_record_activity(
+        conn=conn,
+        model=args.get("model", "account.move"),
+        record_id=args["record_id"],
+        limit=args.get("limit", 30),
+    )
 
 
 async def _configure_connection(server: Any, arguments: dict) -> CallToolResult:

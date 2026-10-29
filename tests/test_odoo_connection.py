@@ -90,6 +90,16 @@ class TestFormatters:
         assert "42" in result
         assert "res.partner" in result
 
+    def test_clean_html(self):
+        """Test clean_html strips tags and unescapes entities."""
+        from mcp_server_odoo.formatters import clean_html
+        
+        raw_html = "<p>Invoice validated<br/>Next line &amp; &lt;details&gt;</p>"
+        cleaned = clean_html(raw_html)
+        assert cleaned == "Invoice validated\nNext line & <details>"
+        assert clean_html("") == ""
+        assert clean_html(None) == ""
+
 
 class TestSchemas:
     """Test Pydantic schemas."""

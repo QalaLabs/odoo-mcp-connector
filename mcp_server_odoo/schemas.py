@@ -267,3 +267,17 @@ class ConfigureConnectionInput(BaseModel):
     user: Optional[str] = Field(default=None, description="Username")
     password: Optional[str] = Field(default=None, description="Password")
     yolo_mode: Optional[Literal["off", "read", "true"]] = Field(default=None, description="YOLO mode setting")
+
+
+class GetInvoiceActivityInput(BaseModel):
+    """Input for get_invoice_activity tool."""
+    invoice_id: int = Field(..., description="Invoice / account.move ID")
+    limit: int = Field(default=30, ge=1, le=100, description="Max chatter messages to retrieve")
+
+
+class GetRecordActivityInput(BaseModel):
+    """Input for get_record_activity tool."""
+    model: str = Field(default="account.move", description="Odoo model name (e.g., account.move, crm.lead, sale.order)")
+    record_id: int = Field(..., description="Record ID")
+    limit: int = Field(default=30, ge=1, le=100, description="Max chatter messages to retrieve")
+

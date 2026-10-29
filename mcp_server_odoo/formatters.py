@@ -1,6 +1,8 @@
 """Formatting utilities for LLM-friendly output."""
 
 from __future__ import annotations
+import html
+import re
 from typing import Any, Optional
 from datetime import datetime
 
@@ -179,3 +181,110 @@ def truncate_text(text: str, max_length: int = 500) -> str:
     if len(text) <= max_length:
         return text
     return text[:max_length] + "..."
+
+
+def clean_html(text: str) -> str:
+    """Strip HTML tags and convert entities to clean plain text."""
+    if not text:
+        return ""
+    # Convert <br> and </p> tags to newlines
+    text = re.sub(r'(?i)<br\s*/?>', '\n', text)
+    text = re.sub(r'(?i)</p>', '\n', text)
+    # Remove all remaining HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Unescape HTML entities
+    text = html.unescape(text)
+    # Clean up whitespace line by line
+    lines = [line.strip() for line in text.splitlines()]
+    cleaned = []
+    for line in lines:
+        if line or (cleaned and cleaned[-1]):
+            cleaned.append(line)
+    return "\n".join(cleaned).strip()
+
+
+def _extract_name(val: Any) -> str:
+    """Extract display name from Odoo Many2one or raw value."""
+    if isinstance(val, (list, tuple)) and len(val) > 1:
+        return str(val[1])
+    if isinstance(val, dict):
+        return str(val.get("display_name") or val.get("name") or val.get("id", "Unknown"))
+    if val is not None and val is not False and val != "":
+        return str(val)
+    return "System"
+
+
+def _get_tracking_val(d: dict, prefix: str) -> str:
+    """Extract the string representation of an old or new tracking value."""
+    for suffix in ["char", "text", "datetime", "integer", "float", "monetary"]:
+        val = d.get(f"{prefix}_value_{suffix}")
+        if val is not None and val is not False and val != "":
+            return str(val)
+    return ""
+
+
+def format_record_activity(
+    model: str,
+    record_id: int,
+    activities: list[dict],
+    messages: list[dict],
+    tracking_map: dict[int, list[dict]],
+    record_name: Optional[str] = None,
+) -> str:
+    """Format combined record activities, messages, and tracking diffs for LLM display."""
+    title = f"## Activity Timeline for {model} #{record_id}"
+    if record_name:
+        title += f" ({record_name})"
+
+    sections = [title, ""]
+
+    if activities:
+        sections.append(f"### Scheduled Activities ({len(activities)} pending)")
+        for act in activities:
+            act_type = _extract_name(act.get("activity_type_id")) or "Activity"
+            summary = act.get("summary") or "No summary"
+            user = _extract_name(act.get("user_id")) or "Unassigned"
+            deadline = act.get("date_deadline") or "No deadline"
+            state = act.get("state") or "planned"
+            sections.append(f"- **[{act_type}]** {summary} — **Assigned to:** {user} | **Due:** {deadline} ({state.capitalize()})")
+            if act.get("note"):
+                clean_note = clean_html(act["note"])
+                if clean_note:
+                    sections.append(f"  > {clean_note}")
+        sections.append("")
+
+    sections.append("### Chatter History & Audit Log")
+    if not messages:
+        sections.append("No activity or chatter messages recorded.")
+        return "\n".join(sections).strip()
+
+    for msg in messages:
+        author = _extract_name(msg.get("author_id"))
+        date = msg.get("date", "N/A")
+        body = clean_html(msg.get("body", ""))
+        subject = msg.get("subject")
+
+        msg_lines = [f"**[{date}] {author}**"]
+        if subject and subject != body and subject.lower() != "false":
+            msg_lines.append(f"*{subject}*")
+        if body:
+            msg_lines.append(body)
+
+        # Append field tracking changes
+        msg_id = msg.get("id")
+        tracking_vals = tracking_map.get(msg_id, [])
+        for tv in tracking_vals:
+            field = tv.get("field_desc") or tv.get("field_info") or "Field"
+            old_val = _get_tracking_val(tv, "old")
+            new_val = _get_tracking_val(tv, "new")
+            if not old_val and not new_val:
+                continue
+            old_str = old_val if old_val else "/"
+            new_str = new_val if new_val else "/"
+            msg_lines.append(f"• {old_str} → {new_str} ({field})")
+
+        sections.append("\n".join(msg_lines))
+        sections.append("")
+
+    return "\n".join(sections).strip()
+
